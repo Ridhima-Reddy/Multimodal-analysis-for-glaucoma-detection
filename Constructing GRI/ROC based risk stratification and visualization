@@ -1,0 +1,414 @@
+# ============================================
+# BLOCK 5 — ROC-BASED RISK STRATIFICATION
+# + ALL FIGURES
+# ============================================
+
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+from sklearn.metrics import (
+    roc_curve,
+    roc_auc_score
+)
+
+# ============================================
+# LOAD RESULTS
+# ============================================
+
+df = pd.read_csv(
+    "GRI_results.csv"
+)
+
+feature_table = pd.read_csv(
+    "GRI_feature_table.csv"
+)
+
+# ============================================
+# ROC CURVE
+# ============================================
+
+fpr, tpr, thresholds = roc_curve(
+
+    df["Label"],
+
+    df["GRI_probability"]
+
+)
+
+specificity = 1 - fpr
+
+# ============================================
+# TARGET OPERATING POINTS
+# ============================================
+
+TARGET_SENSITIVITY = 0.90
+TARGET_SPECIFICITY = 0.90
+
+# ============================================
+# LOW-RISK THRESHOLD
+# ============================================
+
+low_idx = np.argmin(
+
+    np.abs(
+        tpr - TARGET_SENSITIVITY
+    )
+
+)
+
+low_prob_thresh = thresholds[low_idx]
+
+# ============================================
+# HIGH-RISK THRESHOLD
+# ============================================
+
+high_idx = np.argmin(
+
+    np.abs(
+        specificity - TARGET_SPECIFICITY
+    )
+
+)
+
+high_prob_thresh = thresholds[high_idx]
+
+# ============================================
+# MAP TO GRI SCORE
+# ============================================
+
+low_gri_thresh = df.loc[
+
+    np.argmin(
+
+        np.abs(
+
+            df["GRI_probability"]
+
+            -
+
+            low_prob_thresh
+
+        )
+
+    ),
+
+    "GRI_Score"
+
+]
+
+high_gri_thresh = df.loc[
+
+    np.argmin(
+
+        np.abs(
+
+            df["GRI_probability"]
+
+            -
+
+            high_prob_thresh
+
+        )
+
+    ),
+
+    "GRI_Score"
+
+]
+
+low_thresh = min(
+    low_gri_thresh,
+    high_gri_thresh
+)
+
+high_thresh = max(
+    low_gri_thresh,
+    high_gri_thresh
+)
+
+# ============================================
+# PRINT THRESHOLDS
+# ============================================
+
+print("\n===================================")
+print("TRUE ROC-BASED THRESHOLDS")
+print("===================================\n")
+
+print(
+    f"Low-risk threshold: "
+    f"{low_thresh:.2f}"
+)
+
+print(
+    f"High-risk threshold: "
+    f"{high_thresh:.2f}"
+)
+
+# ============================================
+# ASSIGN RISK CATEGORY
+# ============================================
+
+def assign_risk(score):
+
+    if score < low_thresh:
+
+        return "Low"
+
+    elif score < high_thresh:
+
+        return "Medium"
+
+    else:
+
+        return "High"
+
+df["Risk_Category"] = df[
+    "GRI_Score"
+].apply(assign_risk)
+
+# ============================================
+# RISK DISTRIBUTION
+# ============================================
+
+print("\n===================================")
+print("RISK DISTRIBUTION")
+print("===================================\n")
+
+summary = pd.crosstab(
+
+    df["Risk_Category"],
+
+    df["Label"]
+
+)
+
+print(summary)
+
+# ============================================
+# GLAUCOMA PERCENTAGES
+# ============================================
+
+print("\n===================================")
+print("GLAUCOMA PERCENTAGES")
+print("===================================\n")
+
+for category in ["High", "Medium", "Low"]:
+
+    subset = df[
+        df["Risk_Category"] == category
+    ]
+
+    glaucoma_pct = (
+        subset["Label"].mean() * 100
+    )
+
+    print(
+
+        f"{category:10s}: "
+
+        f"{glaucoma_pct:.1f}% glaucoma "
+
+        f"(n={len(subset)})"
+
+    )
+
+# ============================================
+# SAVE SUMMARY
+# ============================================
+
+summary.to_csv(
+    "GRI_risk_summary.csv"
+)
+
+df.to_csv(
+    "GRI_risk_stratified.csv",
+    index=False
+)
+
+# ============================================
+# FINAL AUC
+# ============================================
+
+final_auc = roc_auc_score(
+
+    df["Label"],
+
+    df["GRI_probability"]
+
+)
+
+# ============================================
+# FIGURE 1 — RISK DISTRIBUTION
+# ============================================
+
+glaucoma = df[
+    df["Label"] == 1
+]["GRI_Score"]
+
+normal = df[
+    df["Label"] == 0
+]["GRI_Score"]
+
+plt.figure(figsize=(7,5))
+
+plt.hist(
+
+    glaucoma,
+
+    bins=20,
+
+    alpha=0.6,
+
+    density=True,
+
+    label="Glaucoma"
+
+)
+
+plt.hist(
+
+    normal,
+
+    bins=20,
+
+    alpha=0.6,
+
+    density=True,
+
+    label="Normal"
+
+)
+
+plt.xlabel("GRI Score")
+
+plt.ylabel("Density")
+
+plt.title("Risk Score Distribution")
+
+plt.legend()
+
+plt.tight_layout()
+
+plt.savefig(
+    "FIGURE1_Distribution.png",
+    dpi=300
+)
+
+plt.show()
+
+# ============================================
+# FIGURE 2 — RISK CATEGORY BOXPLOT
+# ============================================
+
+plt.figure(figsize=(7,5))
+
+categories = ["High", "Medium", "Low"]
+
+data_to_plot = []
+
+for cat in categories:
+
+    data_to_plot.append(
+
+        df[
+            df["Risk_Category"] == cat
+        ]["GRI_Score"]
+
+    )
+
+plt.boxplot(
+
+    data_to_plot,
+
+    tick_labels=categories
+
+)
+
+plt.ylabel("GRI Score")
+
+plt.title("Risk Stratification")
+
+plt.tight_layout()
+
+plt.savefig(
+    "FIGURE2_Boxplot.png",
+    dpi=300
+)
+
+plt.show()
+
+# ============================================
+# FIGURE 3 — FEATURE CONTRIBUTION
+# ============================================
+
+plt.figure(figsize=(8,5))
+
+plt.bar(
+
+    feature_table["Feature"],
+
+    feature_table["GRI_Points"]
+
+)
+
+plt.ylabel("GRI Points")
+
+plt.title("Feature Contribution to GRI")
+
+plt.xticks(rotation=45)
+
+plt.tight_layout()
+
+plt.savefig(
+    "FIGURE3_FeatureContribution.png",
+    dpi=300
+)
+
+plt.show()
+
+# ============================================
+# FIGURE 4 — ROC CURVE
+# ============================================
+
+plt.figure(figsize=(6,6))
+
+plt.plot(
+
+    fpr,
+
+    tpr,
+
+    label=f"AUC = {final_auc:.3f}"
+
+)
+
+plt.plot(
+
+    [0,1],
+
+    [0,1],
+
+    linestyle="--"
+
+)
+
+plt.xlabel("False Positive Rate")
+
+plt.ylabel("True Positive Rate")
+
+plt.title("ROC Curve")
+
+plt.legend(loc="lower right")
+
+plt.tight_layout()
+
+plt.savefig(
+    "FIGURE4_ROC.png",
+    dpi=300
+)
+
+plt.show()
+
+print("\n✅ RISK STRATIFICATION COMPLETE")
+print("✅ ALL FIGURES GENERATED")
