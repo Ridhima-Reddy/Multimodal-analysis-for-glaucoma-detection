@@ -309,11 +309,13 @@ min_abs_coef = np.min(
 
 selected_df["GRI_Points"] = np.round(
 
-    selected_df["Coefficient"]
+    (
+        selected_df["Coefficient"]
+        /
+        min_abs_coef
+    )
 
-    /
-
-    min_abs_coef
+    * 2
 
 ).astype(int)
 
